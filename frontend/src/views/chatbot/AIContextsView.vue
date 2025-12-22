@@ -454,7 +454,10 @@ async function confirmDeleteContext() {
                   <CardDescription>{{ context.context_type === 'api' ? 'API Fetch' : 'Static Content' }}</CardDescription>
                 </div>
               </div>
-              <Badge :variant="context.enabled ? 'default' : 'secondary'">
+              <Badge
+                variant="outline"
+                :class="context.enabled ? 'border-green-600 text-green-600' : ''"
+              >
                 {{ context.enabled ? 'Active' : 'Inactive' }}
               </Badge>
             </div>
@@ -496,7 +499,7 @@ async function confirmDeleteContext() {
             <Sparkles class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="text-lg font-medium">No AI contexts yet</p>
             <p class="text-sm mb-4">Create knowledge contexts that the AI can use to answer questions.</p>
-            <Button @click="openCreateDialog">
+            <Button variant="outline" size="sm" @click="openCreateDialog">
               <Plus class="h-4 w-4 mr-2" />
               Create Context
             </Button>

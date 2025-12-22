@@ -1095,7 +1095,7 @@ function removeButton(step: FlowStep, index: number) {
             <Workflow class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="text-lg font-medium">No conversation flows yet</p>
             <p class="text-sm mb-4">Create your first flow to automate conversations.</p>
-            <Button @click="openCreateDialog">
+            <Button variant="outline" size="sm" @click="openCreateDialog">
               <Plus class="h-4 w-4 mr-2" />
               Create Flow
             </Button>
