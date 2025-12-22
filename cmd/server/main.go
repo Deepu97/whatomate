@@ -70,6 +70,9 @@ func main() {
 		if err := database.CreateIndexes(db); err != nil {
 			lo.Fatal("Failed to create indexes", "error", err)
 		}
+		if err := database.CreateDefaultAdmin(db); err != nil {
+			lo.Fatal("Failed to create default admin", "error", err)
+		}
 		lo.Info("Migrations completed successfully")
 	}
 

@@ -297,6 +297,35 @@ function goToPage(page: number) {
     <!-- Content -->
     <div class="flex-1 p-6 overflow-auto">
       <div class="max-w-6xl mx-auto space-y-4">
+         <!-- Role Info -->
+        <Card>
+          <CardContent class="p-6">
+            <h3 class="font-semibold mb-4">Role Permissions</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div class="flex items-start gap-3">
+                <ShieldCheck class="h-5 w-5 text-primary mt-0.5" />
+                <div>
+                  <span class="font-medium">Admin</span>
+                  <p class="text-muted-foreground">Full access including user management</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <Shield class="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <span class="font-medium">Manager</span>
+                  <p class="text-muted-foreground">All features except user management</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <UserCog class="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <span class="font-medium">Agent</span>
+                  <p class="text-muted-foreground">Chat with assigned contacts only</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <!-- Search and filters -->
         <div class="flex items-center gap-4">
           <div class="relative flex-1 max-w-sm">
@@ -462,36 +491,6 @@ function goToPage(page: number) {
             </Button>
           </div>
         </div>
-
-        <!-- Role Info -->
-        <Card>
-          <CardContent class="p-6">
-            <h3 class="font-semibold mb-4">Role Permissions</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div class="flex items-start gap-3">
-                <ShieldCheck class="h-5 w-5 text-primary mt-0.5" />
-                <div>
-                  <span class="font-medium">Admin</span>
-                  <p class="text-muted-foreground">Full access including user management</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <Shield class="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div>
-                  <span class="font-medium">Manager</span>
-                  <p class="text-muted-foreground">All features except user management</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <UserCog class="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div>
-                  <span class="font-medium">Agent</span>
-                  <p class="text-muted-foreground">Chat with assigned contacts only</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
 

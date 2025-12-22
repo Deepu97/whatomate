@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/models"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -117,6 +119,54 @@ func CreateIndexes(db *gorm.DB) error {
 		if err := db.Exec(idx).Error; err != nil {
 			return fmt.Errorf("failed to create index: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// CreateDefaultAdmin creates a default admin user if no users exist
+// This should only be called once during initial setup
+func CreateDefaultAdmin(db *gorm.DB) error {
+	// Check if any users exist
+	var count int64
+	if err := db.Model(&models.User{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to count users: %w", err)
+	}
+
+	// If users already exist, skip creating default admin
+	if count > 0 {
+		return nil
+	}
+
+	// Create default organization
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Default Organization",
+		Settings:  models.JSONB{},
+	}
+	if err := db.Create(&org).Error; err != nil {
+		return fmt.Errorf("failed to create default organization: %w", err)
+	}
+
+	// Hash the default password
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Create default admin user
+	admin := models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Email:          "admin@admin.com",
+		PasswordHash:   string(passwordHash),
+		FullName:       "Admin",
+		Role:           "admin",
+		IsActive:       true,
+		Settings:       models.JSONB{},
+	}
+	if err := db.Create(&admin).Error; err != nil {
+		return fmt.Errorf("failed to create default admin user: %w", err)
 	}
 
 	return nil

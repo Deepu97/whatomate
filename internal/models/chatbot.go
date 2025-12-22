@@ -14,6 +14,9 @@ type ChatbotSettings struct {
 	WhatsAppAccount string    `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name (empty for org-level defaults)
 	IsEnabled       bool      `gorm:"default:false" json:"is_enabled"`
 	DefaultResponse      string      `gorm:"type:text" json:"default_response"`
+	GreetingButtons      JSONBArray  `gorm:"type:jsonb;default:'[]'" json:"greeting_buttons"` // [{id, title}] - max 10 buttons
+	FallbackMessage      string      `gorm:"type:text" json:"fallback_message"`
+	FallbackButtons      JSONBArray  `gorm:"type:jsonb;default:'[]'" json:"fallback_buttons"` // [{id, title}] - max 10 buttons
 	BusinessHoursEnabled bool        `gorm:"default:false" json:"business_hours_enabled"`
 	BusinessHours        JSONBArray  `gorm:"type:jsonb;default:'[]'" json:"business_hours"` // [{day, enabled, start_time, end_time}]
 	OutOfHoursMessage    string      `gorm:"type:text" json:"out_of_hours_message"`

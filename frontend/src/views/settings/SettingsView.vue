@@ -18,8 +18,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'vue-sonner'
-import { Settings, Bot, Bell, Loader2, Brain } from 'lucide-vue-next'
+import { Settings, Bot, Bell, Loader2, Brain, Plus, X } from 'lucide-vue-next'
 import { chatbotService, usersService } from '@/services/api'
+
+interface MessageButton {
+  id: string
+  title: string
+}
 
 const isSubmitting = ref(false)
 
@@ -31,10 +36,39 @@ const generalSettings = ref({
 
 const chatbotSettings = ref({
   greeting_message: '',
+  greeting_buttons: [] as MessageButton[],
   fallback_message: '',
+  fallback_buttons: [] as MessageButton[],
   session_timeout_minutes: 30,
   transfer_message: ''
 })
+
+// Button management functions
+const addGreetingButton = () => {
+  if (chatbotSettings.value.greeting_buttons.length >= 10) {
+    toast.error('Maximum 10 buttons allowed')
+    return
+  }
+  const id = `btn_${Date.now()}`
+  chatbotSettings.value.greeting_buttons.push({ id, title: '' })
+}
+
+const removeGreetingButton = (index: number) => {
+  chatbotSettings.value.greeting_buttons.splice(index, 1)
+}
+
+const addFallbackButton = () => {
+  if (chatbotSettings.value.fallback_buttons.length >= 10) {
+    toast.error('Maximum 10 buttons allowed')
+    return
+  }
+  const id = `btn_${Date.now()}`
+  chatbotSettings.value.fallback_buttons.push({ id, title: '' })
+}
+
+const removeFallbackButton = (index: number) => {
+  chatbotSettings.value.fallback_buttons.splice(index, 1)
+}
 
 const aiSettings = ref({
   ai_enabled: false,
@@ -72,7 +106,9 @@ onMounted(async () => {
     if (data.settings) {
       chatbotSettings.value = {
         greeting_message: data.settings.greeting_message || '',
+        greeting_buttons: data.settings.greeting_buttons || [],
         fallback_message: data.settings.fallback_message || '',
+        fallback_buttons: data.settings.fallback_buttons || [],
         session_timeout_minutes: data.settings.session_timeout_minutes || 30,
         transfer_message: ''
       }
@@ -127,11 +163,25 @@ async function saveGeneralSettings() {
 }
 
 async function saveChatbotSettings() {
+  // Validate buttons have titles
+  const invalidGreetingBtn = chatbotSettings.value.greeting_buttons.find(btn => !btn.title.trim())
+  if (invalidGreetingBtn) {
+    toast.error('All greeting buttons must have a title')
+    return
+  }
+  const invalidFallbackBtn = chatbotSettings.value.fallback_buttons.find(btn => !btn.title.trim())
+  if (invalidFallbackBtn) {
+    toast.error('All fallback buttons must have a title')
+    return
+  }
+
   isSubmitting.value = true
   try {
     await chatbotService.updateSettings({
       greeting_message: chatbotSettings.value.greeting_message,
+      greeting_buttons: chatbotSettings.value.greeting_buttons.filter(btn => btn.title.trim()),
       fallback_message: chatbotSettings.value.fallback_message,
+      fallback_buttons: chatbotSettings.value.fallback_buttons.filter(btn => btn.title.trim()),
       session_timeout_minutes: chatbotSettings.value.session_timeout_minutes
     })
     toast.success('Chatbot settings saved')
@@ -291,6 +341,45 @@ async function saveNotificationSettings() {
                     placeholder="Hello! How can I help you?"
                     :rows="2"
                   />
+                  <!-- Greeting Buttons -->
+                  <div class="mt-2">
+                    <div class="flex items-center justify-between mb-2">
+                      <Label class="text-sm text-muted-foreground">Quick Reply Buttons (optional)</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        @click="addGreetingButton"
+                        :disabled="chatbotSettings.greeting_buttons.length >= 10"
+                      >
+                        <Plus class="h-4 w-4 mr-1" />
+                        Add Button
+                      </Button>
+                    </div>
+                    <div v-if="chatbotSettings.greeting_buttons.length > 0" class="space-y-2">
+                      <div
+                        v-for="(button, index) in chatbotSettings.greeting_buttons"
+                        :key="button.id"
+                        class="flex items-center gap-2"
+                      >
+                        <Input
+                          v-model="button.title"
+                          placeholder="Button text (max 20 chars)"
+                          maxlength="20"
+                          class="flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          @click="removeGreetingButton(index)"
+                        >
+                          <X class="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p class="text-xs text-muted-foreground">
+                        1-3 buttons show as reply buttons, 4-10 show as a list menu
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div class="space-y-2">
                   <Label for="fallback">Fallback Message</Label>
@@ -300,6 +389,45 @@ async function saveNotificationSettings() {
                     placeholder="Sorry, I didn't understand that."
                     :rows="2"
                   />
+                  <!-- Fallback Buttons -->
+                  <div class="mt-2">
+                    <div class="flex items-center justify-between mb-2">
+                      <Label class="text-sm text-muted-foreground">Quick Reply Buttons (optional)</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        @click="addFallbackButton"
+                        :disabled="chatbotSettings.fallback_buttons.length >= 10"
+                      >
+                        <Plus class="h-4 w-4 mr-1" />
+                        Add Button
+                      </Button>
+                    </div>
+                    <div v-if="chatbotSettings.fallback_buttons.length > 0" class="space-y-2">
+                      <div
+                        v-for="(button, index) in chatbotSettings.fallback_buttons"
+                        :key="button.id"
+                        class="flex items-center gap-2"
+                      >
+                        <Input
+                          v-model="button.title"
+                          placeholder="Button text (max 20 chars)"
+                          maxlength="20"
+                          class="flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          @click="removeFallbackButton(index)"
+                        >
+                          <X class="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p class="text-xs text-muted-foreground">
+                        1-3 buttons show as reply buttons, 4-10 show as a list menu
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div class="space-y-2">
                   <Label for="transfer">Transfer Message</Label>

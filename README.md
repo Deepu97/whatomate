@@ -148,6 +148,15 @@ docker compose up -d
 
 Access the application at `http://localhost:3000`
 
+### Default Admin Login
+
+When you run migrations for the first time, a default admin user is created:
+
+- **Email**: `admin@admin.com`
+- **Password**: `admin`
+
+> **Important**: Change this password immediately after first login via the Profile page.
+
 ## Configuration
 
 Copy `config.example.toml` to `config.toml` and update the values:

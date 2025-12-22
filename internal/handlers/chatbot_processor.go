@@ -159,14 +159,48 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		a.Log.Info("AI not configured", "ai_enabled", settings.AIEnabled, "has_provider", settings.AIProvider != "", "has_api_key", settings.AIAPIKey != "")
 	}
 
-	// If no AI response or AI not enabled, send default response (if configured)
-	if settings.DefaultResponse != "" {
-		a.Log.Info("Sending default response", "response", settings.DefaultResponse)
-		a.sendAndSaveTextMessage(&account, contact, settings.DefaultResponse)
-		// Log outgoing message
-		a.logSessionMessage(session.ID, "outgoing", settings.DefaultResponse, "default_response")
+	// If no AI response or AI not enabled, send fallback message first, then greeting as last resort
+	if settings.FallbackMessage != "" {
+		a.Log.Info("Sending fallback message", "response", settings.FallbackMessage)
+		// Check if fallback has buttons
+		if len(settings.FallbackButtons) > 0 {
+			fallbackButtons := make([]map[string]interface{}, 0)
+			for _, btn := range settings.FallbackButtons {
+				if btnMap, ok := btn.(map[string]interface{}); ok {
+					fallbackButtons = append(fallbackButtons, btnMap)
+				}
+			}
+			if len(fallbackButtons) > 0 {
+				a.sendAndSaveInteractiveButtons(&account, contact, settings.FallbackMessage, fallbackButtons)
+			} else {
+				a.sendAndSaveTextMessage(&account, contact, settings.FallbackMessage)
+			}
+		} else {
+			a.sendAndSaveTextMessage(&account, contact, settings.FallbackMessage)
+		}
+		a.logSessionMessage(session.ID, "outgoing", settings.FallbackMessage, "fallback_response")
+	} else if settings.DefaultResponse != "" {
+		// Fall back to greeting/default response if no fallback message
+		a.Log.Info("Sending greeting/default response", "response", settings.DefaultResponse)
+		// Check if greeting has buttons
+		if len(settings.GreetingButtons) > 0 {
+			greetingButtons := make([]map[string]interface{}, 0)
+			for _, btn := range settings.GreetingButtons {
+				if btnMap, ok := btn.(map[string]interface{}); ok {
+					greetingButtons = append(greetingButtons, btnMap)
+				}
+			}
+			if len(greetingButtons) > 0 {
+				a.sendAndSaveInteractiveButtons(&account, contact, settings.DefaultResponse, greetingButtons)
+			} else {
+				a.sendAndSaveTextMessage(&account, contact, settings.DefaultResponse)
+			}
+		} else {
+			a.sendAndSaveTextMessage(&account, contact, settings.DefaultResponse)
+		}
+		a.logSessionMessage(session.ID, "outgoing", settings.DefaultResponse, "greeting_response")
 	} else {
-		a.Log.Info("No default response configured, no response will be sent")
+		a.Log.Info("No fallback or greeting response configured, no response will be sent")
 	}
 }
 

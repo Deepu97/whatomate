@@ -13,15 +13,17 @@ import (
 
 // ChatbotSettingsResponse represents the response for chatbot settings
 type ChatbotSettingsResponse struct {
-	Enabled               bool   `json:"enabled"`
-	GreetingMessage       string `json:"greeting_message"`
-	FallbackMessage       string `json:"fallback_message"`
-	SessionTimeoutMinutes int    `json:"session_timeout_minutes"`
-	AIEnabled             bool   `json:"ai_enabled"`
-	AIProvider            string `json:"ai_provider"`
-	AIModel               string `json:"ai_model"`
-	AIMaxTokens           int    `json:"ai_max_tokens"`
-	AISystemPrompt        string `json:"ai_system_prompt"`
+	Enabled               bool                     `json:"enabled"`
+	GreetingMessage       string                   `json:"greeting_message"`
+	GreetingButtons       []map[string]interface{} `json:"greeting_buttons"`
+	FallbackMessage       string                   `json:"fallback_message"`
+	FallbackButtons       []map[string]interface{} `json:"fallback_buttons"`
+	SessionTimeoutMinutes int                      `json:"session_timeout_minutes"`
+	AIEnabled             bool                     `json:"ai_enabled"`
+	AIProvider            string                   `json:"ai_provider"`
+	AIModel               string                   `json:"ai_model"`
+	AIMaxTokens           int                      `json:"ai_max_tokens"`
+	AISystemPrompt        string                   `json:"ai_system_prompt"`
 }
 
 // ChatbotStatsResponse represents chatbot statistics
@@ -95,10 +97,31 @@ func (a *App) GetChatbotSettings(r *fastglue.Request) error {
 	// Gather stats
 	stats := a.getChatbotStats(orgID)
 
+	// Convert button arrays
+	greetingButtons := make([]map[string]interface{}, 0)
+	if settings.GreetingButtons != nil {
+		for _, btn := range settings.GreetingButtons {
+			if btnMap, ok := btn.(map[string]interface{}); ok {
+				greetingButtons = append(greetingButtons, btnMap)
+			}
+		}
+	}
+
+	fallbackButtons := make([]map[string]interface{}, 0)
+	if settings.FallbackButtons != nil {
+		for _, btn := range settings.FallbackButtons {
+			if btnMap, ok := btn.(map[string]interface{}); ok {
+				fallbackButtons = append(fallbackButtons, btnMap)
+			}
+		}
+	}
+
 	settingsResp := ChatbotSettingsResponse{
 		Enabled:               settings.IsEnabled,
 		GreetingMessage:       settings.DefaultResponse,
-		FallbackMessage:       settings.OutOfHoursMessage,
+		GreetingButtons:       greetingButtons,
+		FallbackMessage:       settings.FallbackMessage,
+		FallbackButtons:       fallbackButtons,
 		SessionTimeoutMinutes: settings.SessionTimeoutMins,
 		AIEnabled:             settings.AIEnabled,
 		AIProvider:            settings.AIProvider,
@@ -121,16 +144,18 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		Enabled               *bool   `json:"enabled"`
-		GreetingMessage       *string `json:"greeting_message"`
-		FallbackMessage       *string `json:"fallback_message"`
-		SessionTimeoutMinutes *int    `json:"session_timeout_minutes"`
-		AIEnabled             *bool   `json:"ai_enabled"`
-		AIProvider            *string `json:"ai_provider"`
-		AIAPIKey              *string `json:"ai_api_key"`
-		AIModel               *string `json:"ai_model"`
-		AIMaxTokens           *int    `json:"ai_max_tokens"`
-		AISystemPrompt        *string `json:"ai_system_prompt"`
+		Enabled               *bool                      `json:"enabled"`
+		GreetingMessage       *string                    `json:"greeting_message"`
+		GreetingButtons       *[]map[string]interface{}  `json:"greeting_buttons"`
+		FallbackMessage       *string                    `json:"fallback_message"`
+		FallbackButtons       *[]map[string]interface{}  `json:"fallback_buttons"`
+		SessionTimeoutMinutes *int                       `json:"session_timeout_minutes"`
+		AIEnabled             *bool                      `json:"ai_enabled"`
+		AIProvider            *string                    `json:"ai_provider"`
+		AIAPIKey              *string                    `json:"ai_api_key"`
+		AIModel               *string                    `json:"ai_model"`
+		AIMaxTokens           *int                       `json:"ai_max_tokens"`
+		AISystemPrompt        *string                    `json:"ai_system_prompt"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -155,8 +180,22 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 	if req.GreetingMessage != nil {
 		settings.DefaultResponse = *req.GreetingMessage
 	}
+	if req.GreetingButtons != nil {
+		buttons := make([]interface{}, len(*req.GreetingButtons))
+		for i, btn := range *req.GreetingButtons {
+			buttons[i] = btn
+		}
+		settings.GreetingButtons = buttons
+	}
 	if req.FallbackMessage != nil {
-		settings.OutOfHoursMessage = *req.FallbackMessage
+		settings.FallbackMessage = *req.FallbackMessage
+	}
+	if req.FallbackButtons != nil {
+		buttons := make([]interface{}, len(*req.FallbackButtons))
+		for i, btn := range *req.FallbackButtons {
+			buttons[i] = btn
+		}
+		settings.FallbackButtons = buttons
 	}
 	if req.SessionTimeoutMinutes != nil {
 		settings.SessionTimeoutMins = *req.SessionTimeoutMinutes

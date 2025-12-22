@@ -70,6 +70,8 @@ Get Whatomate up and running in minutes using Docker or manual installation.
    go run cmd/server/main.go -migrate
    ```
 
+   This will also create a default admin user (see below).
+
 4. **Start the backend server**
 
    ```bash
@@ -85,6 +87,19 @@ Get Whatomate up and running in minutes using Docker or manual installation.
    ```
 
 </Steps>
+
+## Default Admin Login
+
+When you run migrations for the first time, a default admin user is automatically created:
+
+| Field | Value |
+|-------|-------|
+| Email | `admin@admin.com` |
+| Password | `admin` |
+
+<Aside type="caution">
+  Change this password immediately after first login via the Profile page (accessible from the user menu).
+</Aside>
 
 ## WhatsApp Configuration
 
