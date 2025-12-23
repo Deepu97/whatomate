@@ -257,7 +257,8 @@ function getStatusBadgeClass(status: string) {
   }
 }
 
-const webhookUrl = window.location.origin + '/api/webhook'
+const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+const webhookUrl = window.location.origin + basePath + '/api/webhook'
 </script>
 
 <template>
