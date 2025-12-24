@@ -1295,15 +1295,6 @@ func (a *App) fetchApiResponse(apiConfig models.JSONB, sessionData models.JSONB)
 	return result, nil
 }
 
-// fetchApiMessage fetches a message from an external API (legacy function for backwards compatibility)
-func (a *App) fetchApiMessage(apiConfig models.JSONB, sessionData models.JSONB) (string, error) {
-	resp, err := a.fetchApiResponse(apiConfig, sessionData)
-	if err != nil {
-		return "", err
-	}
-	return resp.Message, nil
-}
-
 // extractJsonPath extracts a value from a JSON object using dot notation path
 func (a *App) extractJsonPath(data interface{}, path string) string {
 	parts := strings.Split(path, ".")
