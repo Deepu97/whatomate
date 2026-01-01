@@ -60,6 +60,7 @@ func GetMigrationModels() []MigrationModel {
 		{"Organization", &models.Organization{}},
 		{"User", &models.User{}},
 		{"APIKey", &models.APIKey{}},
+		{"SSOProvider", &models.SSOProvider{}},
 		{"Webhook", &models.Webhook{}},
 		{"WhatsAppAccount", &models.WhatsAppAccount{}},
 		{"Contact", &models.Contact{}},
@@ -193,6 +194,7 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_org_active ON webhooks(organization_id, is_active)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_user_time ON user_availability_logs(user_id, started_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_org_time ON user_availability_logs(organization_id, started_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_providers_org_provider ON sso_providers(organization_id, provider)`,
 	}
 }
 
@@ -245,6 +247,9 @@ func CreateIndexes(db *gorm.DB) error {
 		// User availability logs indexes
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_user_time ON user_availability_logs(user_id, started_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_org_time ON user_availability_logs(organization_id, started_at DESC)`,
+
+		// SSO providers indexes
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_providers_org_provider ON sso_providers(organization_id, provider)`,
 	}
 
 	for _, idx := range indexes {

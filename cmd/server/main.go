@@ -192,6 +192,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/auth/register", app.Register)
 	g.POST("/api/auth/refresh", app.RefreshToken)
 
+	// SSO routes (public)
+	g.GET("/api/auth/sso/providers", app.GetPublicSSOProviders)
+	g.GET("/api/auth/sso/{provider}/init", app.InitSSO)
+	g.GET("/api/auth/sso/{provider}/callback", app.CallbackSSO)
+
 	// Webhook routes (public - for Meta)
 	g.GET("/api/webhook", app.WebhookVerify)
 	g.POST("/api/webhook", app.WebhookHandler)
@@ -207,6 +212,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		if path == "/health" || path == "/ready" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
 			path == "/api/webhook" || path == "/ws" {
+			return r
+		}
+		// Skip auth for SSO routes (they handle their own auth via state tokens)
+		if len(path) >= 13 && path[:13] == "/api/auth/sso" {
 			return r
 		}
 		// Apply auth for all other /api routes (supports both JWT and API key)
@@ -232,9 +241,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			return r // Auth middleware will handle unauthenticated requests
 		}
 
-		// Admin-only routes: user management and API keys
+		// Admin-only routes: user management, API keys, and SSO settings
 		if (len(path) >= 10 && path[:10] == "/api/users") ||
-			(len(path) >= 13 && path[:13] == "/api/api-keys") {
+			(len(path) >= 13 && path[:13] == "/api/api-keys") ||
+			(len(path) >= 17 && path[:17] == "/api/settings/sso") {
 			if role != "admin" {
 				r.RequestCtx.SetStatusCode(403)
 				r.RequestCtx.SetBodyString(`{"status":"error","message":"Admin access required"}`)
@@ -422,6 +432,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Organization Settings
 	g.GET("/api/org/settings", app.GetOrganizationSettings)
 	g.PUT("/api/org/settings", app.UpdateOrganizationSettings)
+
+	// SSO Settings (admin only - enforced by middleware)
+	g.GET("/api/settings/sso", app.GetSSOSettings)
+	g.PUT("/api/settings/sso/{provider}", app.UpdateSSOProvider)
+	g.DELETE("/api/settings/sso/{provider}", app.DeleteSSOProvider)
 
 	// Webhooks
 	g.GET("/api/webhooks", app.ListWebhooks)

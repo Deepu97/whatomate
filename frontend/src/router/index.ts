@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/auth/sso/callback',
+      name: 'sso-callback',
+      component: () => import('@/views/auth/SSOCallbackView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/',
       component: () => import('@/components/layout/AppLayout.vue'),
       meta: { requiresAuth: true },
@@ -152,6 +158,12 @@ const router = createRouter({
           path: 'settings/webhooks',
           name: 'webhooks',
           component: () => import('@/views/settings/WebhooksView.vue'),
+          meta: { roles: ['admin'] }
+        },
+        {
+          path: 'settings/sso',
+          name: 'sso-settings',
+          component: () => import('@/views/settings/SSOSettingsView.vue'),
           meta: { roles: ['admin'] }
         }
       ]

@@ -1,6 +1,6 @@
 module github.com/shridarpatil/whatomate
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.24.5
 
@@ -17,11 +17,13 @@ require (
 	github.com/zerodha/fastglue v1.8.0
 	github.com/zerodha/logf v0.5.5
 	golang.org/x/crypto v0.31.0
+	golang.org/x/oauth2 v0.34.0
 	gorm.io/driver/postgres v1.5.6
 	gorm.io/gorm v1.25.7
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

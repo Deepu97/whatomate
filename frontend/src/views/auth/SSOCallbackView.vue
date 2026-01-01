@@ -1,0 +1,103 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+const status = ref<'loading' | 'success' | 'error'>('loading')
+const errorMessage = ref('')
+
+onMounted(async () => {
+  // Parse tokens from URL fragment (hash)
+  const hash = window.location.hash.substring(1)
+  const params = new URLSearchParams(hash)
+
+  const accessToken = params.get('access_token')
+  const refreshToken = params.get('refresh_token')
+
+  if (!accessToken || !refreshToken) {
+    status.value = 'error'
+    errorMessage.value = 'Invalid SSO callback. Missing tokens.'
+    return
+  }
+
+  try {
+    // Store tokens temporarily to make the /me API call
+    localStorage.setItem('auth_token', accessToken)
+    localStorage.setItem('refresh_token', refreshToken)
+
+    // Fetch user info
+    const response = await api.get('/me')
+    const user = response.data.data
+
+    // Set auth in store
+    authStore.setAuth({
+      user,
+      access_token: accessToken,
+      refresh_token: refreshToken
+    })
+
+    status.value = 'success'
+    toast.success('SSO login successful')
+
+    // Clear hash from URL
+    window.history.replaceState(null, '', window.location.pathname)
+
+    // Redirect based on role
+    setTimeout(() => {
+      if (user.role === 'agent') {
+        router.push('/analytics/agents')
+      } else {
+        router.push('/')
+      }
+    }, 1000)
+  } catch (error: any) {
+    status.value = 'error'
+    errorMessage.value = error.response?.data?.message || 'Failed to complete SSO login'
+    // Clear any stored tokens
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
+  }
+})
+</script>
+
+<template>
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <Card class="w-full max-w-md">
+      <CardHeader class="text-center">
+        <div class="flex justify-center mb-4">
+          <div v-if="status === 'loading'" class="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Loader2 class="h-7 w-7 text-primary animate-spin" />
+          </div>
+          <div v-else-if="status === 'success'" class="h-12 w-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <CheckCircle class="h-7 w-7 text-green-600 dark:text-green-400" />
+          </div>
+          <div v-else class="h-12 w-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <AlertCircle class="h-7 w-7 text-red-600 dark:text-red-400" />
+          </div>
+        </div>
+        <CardTitle class="text-xl">
+          <template v-if="status === 'loading'">Completing SSO Login...</template>
+          <template v-else-if="status === 'success'">Login Successful!</template>
+          <template v-else>SSO Login Failed</template>
+        </CardTitle>
+        <CardDescription>
+          <template v-if="status === 'loading'">Please wait while we complete your authentication.</template>
+          <template v-else-if="status === 'success'">Redirecting you to the dashboard...</template>
+          <template v-else>{{ errorMessage }}</template>
+        </CardDescription>
+      </CardHeader>
+      <CardContent v-if="status === 'error'" class="text-center">
+        <RouterLink to="/login" class="text-primary hover:underline">
+          Return to login
+        </RouterLink>
+      </CardContent>
+    </Card>
+  </div>
+</template>

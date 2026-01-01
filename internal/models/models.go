@@ -112,6 +112,10 @@ type User struct {
 	IsActive       bool      `gorm:"default:true" json:"is_active"`
 	IsAvailable    bool      `gorm:"default:true" json:"is_available"` // Agent availability status (away/available)
 
+	// SSO fields
+	SSOProvider   string `gorm:"size:50" json:"sso_provider,omitempty"`    // google, microsoft, github, facebook, custom
+	SSOProviderID string `gorm:"size:255" json:"sso_provider_id,omitempty"` // External user ID from provider
+
 	// Relations
 	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 }
@@ -156,6 +160,31 @@ type APIKey struct {
 
 func (APIKey) TableName() string {
 	return "api_keys"
+}
+
+// SSOProvider represents an SSO/OAuth provider configuration for an organization
+type SSOProvider struct {
+	BaseModel
+	OrganizationID  uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
+	Provider        string    `gorm:"size:50;not null" json:"provider"` // google, microsoft, github, facebook, custom
+	ClientID        string    `gorm:"size:500;not null" json:"client_id"`
+	ClientSecret    string    `gorm:"size:500;not null" json:"-"` // Never exposed in JSON
+	IsEnabled       bool      `gorm:"default:false" json:"is_enabled"`
+	AllowAutoCreate bool      `gorm:"default:false" json:"allow_auto_create"` // Auto-create new users on SSO login
+	DefaultRole     string    `gorm:"size:50;default:'agent'" json:"default_role"` // Role for auto-created users
+	AllowedDomains  string    `gorm:"type:text" json:"allowed_domains,omitempty"` // Comma-separated email domains
+
+	// Custom OIDC provider fields (only used when Provider = "custom")
+	AuthURL     string `gorm:"size:500" json:"auth_url,omitempty"`
+	TokenURL    string `gorm:"size:500" json:"token_url,omitempty"`
+	UserInfoURL string `gorm:"size:500" json:"user_info_url,omitempty"`
+
+	// Relations
+	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+}
+
+func (SSOProvider) TableName() string {
+	return "sso_providers"
 }
 
 // Webhook represents an outbound webhook configuration for integrations
