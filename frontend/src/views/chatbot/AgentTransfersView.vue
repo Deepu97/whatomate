@@ -131,10 +131,15 @@ onMounted(async () => {
     console.log('Not admin or manager, skipping fetchAgents')
   }
 
-  // Set up periodic refresh every 10 seconds to catch any missed WebSocket updates
+  // Set up periodic check - only fetch if WebSocket hasn't delivered updates recently
+  // This is a fallback for when WebSocket connection is broken
   refreshInterval = window.setInterval(() => {
-    transfersStore.fetchTransfers()
-  }, 10000)
+    // Only fetch if no WebSocket updates in the last 60 seconds
+    if (transfersStore.isSyncStale(60000)) {
+      console.log('WebSocket sync stale, fetching transfers via API')
+      transfersStore.fetchTransfers()
+    }
+  }, 30000)
 })
 
 onUnmounted(() => {

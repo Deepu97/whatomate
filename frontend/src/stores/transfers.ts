@@ -72,6 +72,7 @@ export const useTransfersStore = defineStore('transfers', () => {
   const generalQueueCount = ref(0)
   const teamQueueCounts = ref<Record<string, number>>({})
   const isLoading = ref(false)
+  const lastSyncedAt = ref<number>(0) // Timestamp of last WebSocket sync
 
   // Total queue count (general + all teams)
   const queueCount = computed(() => {
@@ -118,6 +119,9 @@ export const useTransfersStore = defineStore('transfers', () => {
   }
 
   function addTransfer(transfer: AgentTransfer) {
+    // Mark as synced via WebSocket
+    lastSyncedAt.value = Date.now()
+
     // Add to beginning (newest first for display, but server returns FIFO)
     const exists = transfers.value.some(t => t.id === transfer.id)
     if (!exists) {
@@ -136,6 +140,9 @@ export const useTransfersStore = defineStore('transfers', () => {
   }
 
   function updateTransfer(id: string, updates: Partial<AgentTransfer>) {
+    // Mark as synced via WebSocket
+    lastSyncedAt.value = Date.now()
+
     const index = transfers.value.findIndex(t => t.id === id)
     if (index !== -1) {
       const oldTransfer = transfers.value[index]
@@ -173,6 +180,9 @@ export const useTransfersStore = defineStore('transfers', () => {
   }
 
   function removeTransfer(id: string) {
+    // Mark as synced via WebSocket
+    lastSyncedAt.value = Date.now()
+
     const index = transfers.value.findIndex(t => t.id === id)
     if (index !== -1) {
       const transfer = transfers.value[index]
@@ -187,12 +197,19 @@ export const useTransfersStore = defineStore('transfers', () => {
     }
   }
 
+  // Check if WebSocket sync is stale (no updates in given ms)
+  function isSyncStale(thresholdMs: number = 60000): boolean {
+    if (lastSyncedAt.value === 0) return true // Never synced
+    return Date.now() - lastSyncedAt.value > thresholdMs
+  }
+
   return {
     transfers,
     queueCount,
     generalQueueCount,
     teamQueueCounts,
     isLoading,
+    lastSyncedAt,
     activeTransfers,
     myTransfers,
     unassignedCount,
@@ -200,6 +217,7 @@ export const useTransfersStore = defineStore('transfers', () => {
     addTransfer,
     updateTransfer,
     removeTransfer,
-    getActiveTransferForContact
+    getActiveTransferForContact,
+    isSyncStale
   }
 })
