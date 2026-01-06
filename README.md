@@ -29,38 +29,38 @@ A modern WhatsApp Business Platform built with Go (Fastglue) and Vue.js (shadcn-
 <summary>Click to view screenshots</summary>
 
 ### Dashboard
-![Dashboard](screenshot/01-dashboard.png)
+![Dashboard](docs/public/images/01-dashboard.png)
 
 ### Chatbot Settings
-![Chatbot Settings](screenshot/02-chatbot-settings.png)
+![Chatbot Settings](docs/public/images/02-chatbot-settings.png)
 
 ### Keyword Rules
-![Keyword Rules](screenshot/03-keyword-rules.png)
-![Keyword Rule Editor](screenshot/04-keyword-rule-editor.png)
+![Keyword Rules](docs/public/images/03-keyword-rules.png)
+![Keyword Rule Editor](docs/public/images/04-keyword-rule-editor.png)
 
 ### AI Contexts
-![AI Contexts](screenshot/05-ai-contexts.png)
-![AI Context Editor](screenshot/06-ai-context-editor.png)
+![AI Contexts](docs/public/images/05-ai-contexts.png)
+![AI Context Editor](docs/public/images/06-ai-context-editor.png)
 
 ### Conversation Flows
-![Conversation Flows](screenshot/07-conversation-flows.png)
-![Conversation Flow Builder](screenshot/08-conversation-flow-builder.png)
+![Conversation Flows](docs/public/images/07-conversation-flows.png)
+![Conversation Flow Builder](docs/public/images/08-conversation-flow-builder.png)
 
 ### WhatsApp Flows
-![WhatsApp Flows](screenshot/09-whatsapp-flows.png)
-![WhatsApp Flow Builder](screenshot/10-whatsapp-flow-builder.png)
+![WhatsApp Flows](docs/public/images/09-whatsapp-flows.png)
+![WhatsApp Flow Builder](docs/public/images/10-whatsapp-flow-builder.png)
 
 ### Templates
-![Templates](screenshot/11-templates.png)
-![Template Editor](screenshot/12-template-editor.png)
+![Templates](docs/public/images/11-templates.png)
+![Template Editor](docs/public/images/12-template-editor.png)
 
 ### Campaigns
-![Campaigns](screenshot/13-campaigns.png)
-![Campaign Details](screenshot/14-campaign-details.png)
+![Campaigns](docs/public/images/13-campaigns.png)
+![Campaign Details](docs/public/images/14-campaign-details.png)
 
 ### Settings
-![Settings](screenshot/15-settings.png)
-![Account Settings](screenshot/16-account-settings.png)
+![Settings](docs/public/images/15-settings.png)
+![Account Settings](docs/public/images/16-account-settings.png)
 
 </details>
 
