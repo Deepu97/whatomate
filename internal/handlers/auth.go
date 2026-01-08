@@ -132,13 +132,13 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	a.Log.Info("Created organization", "org_id", org.ID, "org_name", org.Name)
 
-	// Create user
+	// Create user (first user of org is always admin)
 	user := models.User{
 		OrganizationID: org.ID,
 		Email:          req.Email,
 		PasswordHash:   string(hashedPassword),
 		FullName:       req.FullName,
-		Role:           "agent", // Default role is agent
+		Role:           "admin", // First user of new org is admin
 		IsActive:       true,
 	}
 
