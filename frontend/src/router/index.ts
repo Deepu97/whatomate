@@ -211,6 +211,12 @@ const router = createRouter({
           name: 'custom-actions',
           component: () => import('@/views/settings/CustomActionsView.vue'),
           meta: { permission: 'custom_actions' }
+        },
+        {
+           path: 'settings/add-organization',
+          name: 'Add organization',
+          component: () => import('@/views/settings/AddOrganization.vue'),
+          meta: { permission: 'add_organization' }
         }
       ]
     },

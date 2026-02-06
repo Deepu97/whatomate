@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
@@ -50,6 +51,73 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]interface{}{
 		"settings": settings,
 		"name":     org.Name,
+	})
+}
+
+func (a *App) CreateOrganization(r *fastglue.Request) error {
+	// (Optional) If only logged-in users can create org:
+	// _, err := a.getOrgIDFromContext(r) // or a.getUserIDFromContext
+	// if err != nil {
+	// 	return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	// }
+
+	var req struct {
+		Name             string  `json:"name"`
+		MaskPhoneNumbers *bool   `json:"mask_phone_numbers"`
+		Timezone         *string `json:"timezone"`
+		DateFormat       *string `json:"date_format"`
+	}
+
+	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Organization name is required", nil, "")
+	}
+
+	// Optional: prevent duplicate org names (remove if you don't want this)
+	var existing models.Organization
+	if err := a.DB.Where("LOWER(name) = LOWER(?)", req.Name).First(&existing).Error; err == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Organization name already exists", nil, "")
+	}
+
+	// Default settings
+	settings := models.JSONB{
+		"mask_phone_numbers": false,
+		"timezone":           "UTC",
+		"date_format":        "YYYY-MM-DD",
+	}
+
+	// Override defaults if provided
+	if req.MaskPhoneNumbers != nil {
+		settings["mask_phone_numbers"] = *req.MaskPhoneNumbers
+	}
+	if req.Timezone != nil && strings.TrimSpace(*req.Timezone) != "" {
+		settings["timezone"] = strings.TrimSpace(*req.Timezone)
+	}
+	if req.DateFormat != nil && strings.TrimSpace(*req.DateFormat) != "" {
+		settings["date_format"] = strings.TrimSpace(*req.DateFormat)
+	}
+
+	org := models.Organization{
+		Name:     req.Name,
+		Slug:     req.Name,
+		Settings: settings,
+	}
+
+	if err := a.DB.Create(&org).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create organization", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]interface{}{
+		"message": "Organization created successfully",
+		"org": map[string]interface{}{
+			"id":       org.ID,
+			"name":     org.Name,
+			"settings": org.Settings,
+		},
 	})
 }
 

@@ -22,24 +22,26 @@ import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
 import { ROLE_BADGE_VARIANTS } from '@/lib/constants'
 import { useDebounceFn } from '@vueuse/core'
-
+import {organizationService} from '../../services/api';
 const { t } = useI18n()
 
 const usersStore = useUsersStore()
 const authStore = useAuthStore()
 const rolesStore = useRolesStore()
 const organizationsStore = useOrganizationsStore()
-
+const isOrgLoading = ref(false)
+const organizations = ref<{ id: number; name: string }[]>([])
 interface UserFormData {
   email: string
   password: string
   full_name: string
   role_id: string
   is_active: boolean
+  organization_id: string
   is_super_admin: boolean
 }
 
-const defaultFormData: UserFormData = { email: '', password: '', full_name: '', role_id: '', is_active: true, is_super_admin: false }
+const defaultFormData: UserFormData = { email: '', password: '', full_name: '', role_id: '', organization_id: '',  is_active: true, is_super_admin: false }
 
 const {
   isLoading, isSubmitting, isDialogOpen, editingItem: editingUser, deleteDialogOpen, itemToDelete: userToDelete,
@@ -84,13 +86,33 @@ const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false)
 const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings' }, { label: t('nav.users') }])
 const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && r.is_system)?.id || ''
 
-function openCreateDialog() { formData.value.role_id = getDefaultRoleId(); baseOpenCreateDialog() }
+function openCreateDialog() { formData.value.role_id = getDefaultRoleId();  formData.value.organization_id = organizationsStore.selectedOrgId || '' ; baseOpenCreateDialog() }
 function openEditDialog(user: User) {
-  baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '', is_active: u.is_active, is_super_admin: u.is_super_admin || false }))
+  baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '',organization_id: (u as any).organization_id || '', is_active: u.is_active, is_super_admin: u.is_super_admin || false }))
+}
+async function loadOrganizations() {
+  isOrgLoading.value = true
+  try {
+    const res = await organizationService.listOrgs()
+    // adjust based on your API envelope structure
+    organizations.value = res.data.data?.organizations ?? res.data.organizations ?? []
+  } 
+  catch (e) {
+    toast.error('Failed to load organizations')
+  }
+   finally 
+  {
+    isOrgLoading.value = false
+  }
 }
 
 watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles() })
-onMounted(() => { fetchUsers(); rolesStore.fetchRoles() })
+onMounted(async() => {
+     await Promise.all([
+    fetchUsers(),
+    loadOrganizations(),
+  ])
+    rolesStore.fetchRoles() })
 
 async function fetchUsers() {
   isLoading.value = true
@@ -107,13 +129,20 @@ async function fetchUsers() {
 }
 
 async function saveUser() {
+   if (!formData.value.organization_id) { toast.error('Select organization'); return }
   if (!formData.value.email.trim() || !formData.value.full_name.trim()) { toast.error(t('users.fillEmailName')); return }
   if (!editingUser.value && !formData.value.password.trim()) { toast.error(t('users.passwordRequired')); return }
   if (!formData.value.role_id) { toast.error(t('users.selectRoleRequired')); return }
 
   isSubmitting.value = true
   try {
-    const data: Record<string, unknown> = { email: formData.value.email, full_name: formData.value.full_name, role_id: formData.value.role_id }
+    
+    const data: Record<string, unknown> = {
+      email: formData.value.email,
+      full_name: formData.value.full_name,
+      role_id: formData.value.role_id,
+      organization_id: formData.value.organization_id, // ✅ send to backend
+    }
     if (editingUser.value) {
       data.is_active = formData.value.is_active
       if (formData.value.password) data.password = formData.value.password
@@ -208,6 +237,32 @@ function getRoleName(user: User) { return user.role?.name || t('users.noRole') }
 
     <CrudFormDialog v-model:open="isDialogOpen" :is-editing="!!editingUser" :is-submitting="isSubmitting" :edit-title="$t('users.editUserTitle')" :create-title="$t('users.addUserTitle')" :edit-description="$t('users.editUserDesc')" :create-description="$t('users.addUserDesc')" :edit-submit-label="$t('users.updateUser')" :create-submit-label="$t('users.createUser')" @submit="saveUser">
       <div class="space-y-4">
+      <div class="space-y-2">
+  <Label for="organization">{{ $t('users.organization') }} <span class="text-destructive">*</span></Label>
+
+  <Select v-model="formData.organization_id">
+    <SelectTrigger>
+      <SelectValue :placeholder="$t('users.selectOrganization')">
+        <template v-if="formData.organization_id">
+          <span class="truncate">
+            {{ organizationsStore.organizations?.find(o => o.id === formData.organization_id)?.name }}
+          </span>
+        </template>
+      </SelectValue>
+    </SelectTrigger>
+
+    <SelectContent>
+      <SelectItem
+        v-for="org in (organizationsStore.organizations || [])"
+        :key="org.id"
+        :value="org.id"
+      >
+        <span class="truncate">{{ org.name }}</span>
+      </SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
         <div class="space-y-2"><Label for="full_name">{{ $t('users.fullName') }} <span class="text-destructive">*</span></Label><Input id="full_name" v-model="formData.full_name" :placeholder="$t('users.fullNamePlaceholder')" /></div>
         <div class="space-y-2"><Label for="email">{{ $t('common.email') }} <span class="text-destructive">*</span></Label><Input id="email" v-model="formData.email" type="email" :placeholder="$t('users.emailPlaceholder')" /></div>
         <div class="space-y-2"><Label for="password">{{ $t('users.password') }} <span v-if="!editingUser" class="text-destructive">*</span><span v-else class="text-muted-foreground">{{ $t('users.keepExisting') }}</span></Label><Input id="password" v-model="formData.password" type="password" :placeholder="$t('users.passwordPlaceholder')" /></div>

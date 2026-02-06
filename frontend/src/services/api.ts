@@ -559,12 +559,21 @@ export const widgetsService = {
 
 export const organizationService = {
   getSettings: () => api.get('/org/settings'),
+  listOrgs:()=> api.get('/org/organizations'),
   updateSettings: (data: {
     mask_phone_numbers?: boolean
     timezone?: string
     date_format?: string
     name?: string
-  }) => api.put('/org/settings', data)
+  }) => api.put('/org/settings', data),
+  insertOrg:( data:{
+       mask_phone_numbers?: boolean
+    timezone?: string
+    date_format?: string
+    name?: string
+    }
+  )=> api.post('/org/insert',data)
+
 }
 
 // Organizations (super admin only)

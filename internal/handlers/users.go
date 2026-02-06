@@ -18,6 +18,7 @@ type UserRequest struct {
 	RoleID       *uuid.UUID `json:"role_id"`
 	IsActive     *bool      `json:"is_active"`
 	IsSuperAdmin *bool      `json:"is_super_admin"`
+	OrgID        string     `json:"organization_id"`
 }
 
 // UserResponse represents the response for a user (without sensitive data)
@@ -154,7 +155,10 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	if req.Email == "" || req.Password == "" || req.FullName == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Email, password, and full_name are required", nil, "")
 	}
-
+	if req.OrgID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Organization ID is required", nil, "")
+	}
+	argID, err := uuid.Parse(req.OrgID)
 	// Determine role
 	var roleID *uuid.UUID
 	if req.RoleID != nil {
@@ -186,7 +190,8 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	}
 
 	user := models.User{
-		OrganizationID: orgID,
+		// OrganizationID: orgID,
+		OrganizationID: argID,
 		Email:          req.Email,
 		PasswordHash:   string(hashedPassword),
 		FullName:       req.FullName,
@@ -619,10 +624,10 @@ func (a *App) UpdateAvailability(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
-		"message":             "Availability updated successfully",
-		"is_available":        user.IsAvailable,
-		"status":              status,
-		"break_started_at":    breakStartedAt,
-		"transfers_to_queue":  transfersReturned,
+		"message":            "Availability updated successfully",
+		"is_available":       user.IsAvailable,
+		"status":             status,
+		"break_started_at":   breakStartedAt,
+		"transfers_to_queue": transfersReturned,
 	})
 }
