@@ -93,13 +93,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	query := a.ScopeToOrg(a.DB, userID, orgID)
 
 	// Users without contacts:read permission can only see contacts assigned to them
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		query = query.Where("phone_number LIKE ? OR profile_name LIKE ?", searchPattern, searchPattern)
+		// Use ILIKE for case-insensitive search on profile_name
+		query = query.Where("phone_number LIKE ? OR profile_name ILIKE ?", searchPattern, searchPattern)
 	}
 
 	// Filter by tags (comma-separated, matches contacts that have ANY of the specified tags)
@@ -112,8 +113,9 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		for _, tag := range tagList {
 			tag = strings.TrimSpace(tag)
 			if tag != "" {
-				conditions = append(conditions, "tags @> ?")
-				args = append(args, fmt.Sprintf(`[%q]`, tag)) // JSON array: ["tagname"]
+				// Use proper JSONB containment with explicit cast
+				conditions = append(conditions, "tags @> ?::jsonb")
+				args = append(args, fmt.Sprintf(`["%s"]`, tag)) // JSON array: ["tagname"]
 			}
 		}
 		if len(conditions) > 0 {
@@ -201,7 +203,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 
 	// Users without contacts:read permission can only access their assigned contacts
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 
@@ -264,7 +266,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return nil
 	}
 
-	hasContactsReadPermission := a.HasPermission(userID, models.ResourceContacts, models.ActionRead)
+	hasContactsReadPermission := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
 
 	// Verify contact belongs to org (and to user if no contacts:read permission)
 	var contact models.Contact
@@ -529,7 +531,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only message their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -712,7 +714,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only message their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -858,7 +860,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only react to messages in their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -1027,7 +1029,7 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	}
 
 	// Only users with write permission can assign contacts
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to assign contacts", nil, "")
 	}
 
@@ -1091,7 +1093,7 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 	// Verify contact belongs to org (users without full read permission can only access assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -1182,7 +1184,7 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 	}
 
 	// Check permission - need contacts:write to update tags on contacts
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite) {
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to update contact tags", nil, "")
 	}
 
@@ -1233,4 +1235,261 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 		"message": "Contact tags updated",
 		"tags":    tags,
 	})
+}
+
+// CreateContactRequest represents the request body for creating a contact
+type CreateContactRequest struct {
+	PhoneNumber     string         `json:"phone_number"`
+	ProfileName     string         `json:"profile_name"`
+	WhatsAppAccount string         `json:"whatsapp_account"`
+	Tags            []string       `json:"tags"`
+	Metadata        map[string]any `json:"metadata"`
+}
+
+// CreateContact creates a new contact or restores a soft-deleted one
+func (a *App) CreateContact(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	// Check permission
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to create contacts", nil, "")
+	}
+
+	var req CreateContactRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	if req.PhoneNumber == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "phone_number is required", nil, "")
+	}
+
+	// Normalize phone number
+	normalizedPhone := req.PhoneNumber
+	if len(normalizedPhone) > 0 && normalizedPhone[0] == '+' {
+		normalizedPhone = normalizedPhone[1:]
+	}
+
+	// Check if contact exists (including soft-deleted)
+	var existingContact models.Contact
+	if err := a.DB.Unscoped().Where("organization_id = ? AND phone_number = ?", orgID, normalizedPhone).First(&existingContact).Error; err == nil {
+		// Contact exists
+		if existingContact.DeletedAt.Valid {
+			// Restore soft-deleted contact
+			a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil)
+			existingContact.DeletedAt.Valid = false
+			// Update fields
+			updates := map[string]any{}
+			if req.ProfileName != "" {
+				updates["profile_name"] = req.ProfileName
+			}
+			if req.WhatsAppAccount != "" {
+				updates["whats_app_account"] = req.WhatsAppAccount
+			}
+			if req.Tags != nil {
+				tagsArray := make(models.JSONBArray, len(req.Tags))
+				for i, tag := range req.Tags {
+					tagsArray[i] = tag
+				}
+				updates["tags"] = tagsArray
+			}
+			if req.Metadata != nil {
+				updates["metadata"] = models.JSONB(req.Metadata)
+			}
+			if len(updates) > 0 {
+				a.DB.Model(&existingContact).Updates(updates)
+			}
+			// Reload contact
+			a.DB.First(&existingContact, existingContact.ID)
+			return r.SendEnvelope(a.buildContactResponse(&existingContact, orgID))
+		}
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
+	}
+
+	// Create new contact
+	contact := models.Contact{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		PhoneNumber:     normalizedPhone,
+		ProfileName:     req.ProfileName,
+		WhatsAppAccount: req.WhatsAppAccount,
+	}
+
+	if req.Tags != nil {
+		tagsArray := make(models.JSONBArray, len(req.Tags))
+		for i, tag := range req.Tags {
+			tagsArray[i] = tag
+		}
+		contact.Tags = tagsArray
+	}
+
+	if req.Metadata != nil {
+		contact.Metadata = models.JSONB(req.Metadata)
+	}
+
+	if err := a.DB.Create(&contact).Error; err != nil {
+		a.Log.Error("Failed to create contact", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
+	}
+
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+}
+
+// UpdateContactRequest represents the request body for updating a contact
+type UpdateContactRequest struct {
+	ProfileName     *string         `json:"profile_name"`
+	WhatsAppAccount *string         `json:"whatsapp_account"`
+	Tags            []string        `json:"tags"`
+	Metadata        *map[string]any `json:"metadata"`
+	AssignedUserID  *uuid.UUID      `json:"assigned_user_id"`
+}
+
+// UpdateContact updates an existing contact
+func (a *App) UpdateContact(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	// Check permission
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to update contacts", nil, "")
+	}
+
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var req UpdateContactRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	// Get contact
+	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	if err != nil {
+		return nil
+	}
+
+	// Build updates map
+	updates := map[string]any{}
+
+	if req.ProfileName != nil {
+		updates["profile_name"] = *req.ProfileName
+	}
+	if req.WhatsAppAccount != nil {
+		updates["whats_app_account"] = *req.WhatsAppAccount
+	}
+	if req.Tags != nil {
+		tagsArray := make(models.JSONBArray, len(req.Tags))
+		for i, tag := range req.Tags {
+			tagsArray[i] = tag
+		}
+		updates["tags"] = tagsArray
+	}
+	if req.Metadata != nil {
+		updates["metadata"] = models.JSONB(*req.Metadata)
+	}
+	if req.AssignedUserID != nil {
+		// Verify user exists in same org
+		var user models.User
+		if err := a.DB.Where("id = ? AND organization_id = ?", req.AssignedUserID, orgID).First(&user).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Assigned user not found", nil, "")
+		}
+		updates["assigned_user_id"] = req.AssignedUserID
+	}
+
+	if len(updates) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No fields to update", nil, "")
+	}
+
+	if err := a.DB.Model(contact).Updates(updates).Error; err != nil {
+		a.Log.Error("Failed to update contact", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
+	}
+
+	// Reload contact
+	a.DB.First(contact, contactID)
+
+	return r.SendEnvelope(a.buildContactResponse(contact, orgID))
+}
+
+// DeleteContact soft-deletes a contact
+func (a *App) DeleteContact(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	// Check permission
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionDelete, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to delete contacts", nil, "")
+	}
+
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	// Get contact
+	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	if err != nil {
+		return nil
+	}
+
+	// Soft delete the contact
+	if err := a.DB.Delete(contact).Error; err != nil {
+		a.Log.Error("Failed to delete contact", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete contact", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"message": "Contact deleted successfully",
+	})
+}
+
+// buildContactResponse creates a ContactResponse from a Contact model
+func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) ContactResponse {
+	// Count unread messages
+	var unreadCount int64
+	a.DB.Model(&models.Message{}).
+		Where("contact_id = ? AND direction = ? AND status != ?", contact.ID, models.DirectionIncoming, models.MessageStatusRead).
+		Count(&unreadCount)
+
+	tags := []string{}
+	if contact.Tags != nil {
+		for _, t := range contact.Tags {
+			if s, ok := t.(string); ok {
+				tags = append(tags, s)
+			}
+		}
+	}
+
+	phoneNumber := contact.PhoneNumber
+	profileName := contact.ProfileName
+	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
+	if shouldMask {
+		phoneNumber = MaskPhoneNumber(phoneNumber)
+		profileName = MaskIfPhoneNumber(profileName)
+	}
+
+	return ContactResponse{
+		ID:                 contact.ID,
+		PhoneNumber:        phoneNumber,
+		Name:               profileName,
+		ProfileName:        profileName,
+		Status:             "active",
+		Tags:               tags,
+		CustomFields:       contact.Metadata,
+		LastMessageAt:      contact.LastMessageAt,
+		LastMessagePreview: contact.LastMessagePreview,
+		UnreadCount:        int(unreadCount),
+		AssignedUserID:     contact.AssignedUserID,
+		CreatedAt:          contact.CreatedAt,
+		UpdatedAt:          contact.UpdatedAt,
+	}
 }

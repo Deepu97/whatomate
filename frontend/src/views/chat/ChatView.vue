@@ -83,37 +83,18 @@ import {
   Globe,
   Code,
   RotateCw,
-  Filter
+  Filter,
+  StickyNote
 } from 'lucide-vue-next'
-import { getInitials } from '@/lib/utils'
+import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
 import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
+import ConversationNotes from '@/components/chat/ConversationNotes.vue'
+import { useNotesStore } from '@/stores/notes'
+import { CreateContactDialog } from '@/components/shared'
 import { Info } from 'lucide-vue-next'
-
-// Avatar gradient colors - consistent per contact based on name hash
-const avatarGradients = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-cyan-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-emerald-500 to-teal-600',
-  'from-indigo-500 to-blue-600',
-  'from-fuchsia-500 to-purple-600',
-  'from-cyan-500 to-blue-600',
-  'from-orange-500 to-red-600',
-  'from-teal-500 to-emerald-600',
-]
-
-function getAvatarGradient(name: string): string {
-  if (!name) return avatarGradients[0]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return avatarGradients[Math.abs(hash) % avatarGradients.length]
-}
 
 const { t } = useI18n()
 const route = useRoute()
@@ -123,7 +104,10 @@ const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const transfersStore = useTransfersStore()
 const tagsStore = useTagsStore()
+const notesStore = useNotesStore()
 const { isDark } = useColorMode()
+
+const canWriteContacts = authStore.hasPermission('contacts', 'write')
 
 const messageInput = ref('')
 const messagesEndRef = ref<HTMLElement | null>(null)
@@ -133,6 +117,7 @@ const isAssignDialogOpen = ref(false)
 const isTransferring = ref(false)
 const isResuming = ref(false)
 const isInfoPanelOpen = ref(false)
+const isNotesPanelOpen = ref(false)
 const contactSessionData = ref<any>(null)
 
 // File upload state
@@ -165,6 +150,21 @@ const executingActionId = ref<string | null>(null)
 
 // Tags filter state
 const isTagFilterOpen = ref(false)
+
+// Add contact dialog state
+const isAddContactOpen = ref(false)
+
+function openAddContactDialog() {
+  isAddContactOpen.value = true
+}
+
+async function onContactCreated(contact: any) {
+  // Refresh contacts and select the new one
+  await contactsStore.fetchContacts()
+  if (contact?.id) {
+    router.push({ name: 'chat-conversation', params: { contactId: contact.id } })
+  }
+}
 
 // Infinite scroll for contacts (load more at bottom)
 const contactsScroll = useInfiniteScroll({
@@ -320,7 +320,7 @@ async function executeCustomAction(action: CustomAction) {
     if (result.clipboard) {
       // Copy to clipboard
       await navigator.clipboard.writeText(result.clipboard)
-      toast.success(t('chat.copiedToClipboard'))
+      toast.success(t('common.copiedToClipboard'))
     }
 
     if (result.toast) {
@@ -401,6 +401,7 @@ onUnmounted(() => {
   wsService.setCurrentContact(null)
   // Clear current contact when leaving chat view so notifications work on other pages
   contactsStore.setCurrentContact(null)
+  notesStore.clearNotes()
   // Clean up blob URLs to prevent memory leaks
   Object.values(mediaBlobUrls.value).forEach(url => {
     URL.revokeObjectURL(url)
@@ -447,11 +448,13 @@ function updateStickyDate(scrollContainer: HTMLElement) {
 // Watch for route changes
 watch(contactId, async (newId) => {
   if (newId) {
+    notesStore.clearNotes()
     await selectContact(newId)
   } else {
     wsService.setCurrentContact(null)
     contactsStore.setCurrentContact(null)
     contactsStore.clearMessages()
+    notesStore.clearNotes()
   }
 })
 
@@ -479,6 +482,9 @@ async function selectContact(id: string) {
       // Setup scroll listener for infinite scroll after initial scroll
       messagesScroll.setup()
     }, 50)
+
+    // Fetch notes for badge count
+    notesStore.fetchNotes(id)
 
     // Fetch session data and auto-open panel if configured
     try {
@@ -1189,6 +1195,20 @@ async function sendMediaMessage() {
               class="pl-8 h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
             />
           </div>
+          <!-- Add Contact -->
+          <Tooltip v-if="canWriteContacts">
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8 shrink-0 text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                @click="openAddContactDialog"
+              >
+                <UserPlus class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{{ $t('chat.addContact') }}</TooltipContent>
+          </Tooltip>
           <!-- Tag Filter -->
           <Popover v-model:open="isTagFilterOpen">
             <PopoverTrigger as-child>
@@ -1381,6 +1401,28 @@ async function sendMediaMessage() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ action.name }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  id="notes-button"
+                  class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :class="isNotesPanelOpen && 'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'"
+                  @click="isNotesPanelOpen = !isNotesPanelOpen"
+                >
+                  <StickyNote class="h-4 w-4" />
+                  <span
+                    v-if="notesStore.notes.length > 0 && !isNotesPanelOpen"
+                    id="notes-badge"
+                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-amber-500 text-[10px] text-white flex items-center justify-center px-1"
+                  >
+                    {{ notesStore.notes.length }}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.internalNotes') }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -1874,6 +1916,13 @@ async function sendMediaMessage() {
       </template>
     </div>
 
+    <!-- Notes Side Panel -->
+    <ConversationNotes
+      v-if="contactsStore.currentContact && isNotesPanelOpen"
+      :contact-id="contactsStore.currentContact.id"
+      @close="isNotesPanelOpen = false"
+    />
+
     <!-- Contact Info Panel -->
     <ContactInfoPanel
       v-if="contactsStore.currentContact && isInfoPanelOpen"
@@ -2017,6 +2066,9 @@ async function sendMediaMessage() {
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Add Contact Dialog -->
+    <CreateContactDialog v-model:open="isAddContactOpen" @created="onContactCreated" />
   </div>
 </template>
 

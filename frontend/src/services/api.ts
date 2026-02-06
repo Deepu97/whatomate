@@ -19,7 +19,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    // Add organization override header for super admins
+    // Add organization override header for org switching
     const selectedOrgId = localStorage.getItem('selected_organization_id')
     if (selectedOrgId) {
       config.headers['X-Organization-ID'] = selectedOrgId
@@ -78,7 +78,7 @@ export const authService = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
 
-  register: (data: { email: string; password: string; full_name: string; organization_name: string }) =>
+  register: (data: { email: string; password: string; full_name: string; organization_id: string }) =>
     api.post('/auth/register', data),
 
   logout: () => api.post('/auth/logout'),
@@ -86,7 +86,10 @@ export const authService = {
   refreshToken: (refreshToken: string) =>
     api.post('/auth/refresh', { refresh_token: refreshToken }),
 
-  me: () => api.get('/auth/me')
+  me: () => api.get('/auth/me'),
+
+  switchOrg: (organizationId: string) =>
+    api.post('/auth/switch-org', { organization_id: organizationId }),
 }
 
 export const usersService = {
@@ -104,7 +107,8 @@ export const usersService = {
   changePassword: (data: { current_password: string; new_password: string }) =>
     api.put('/me/password', data),
   updateAvailability: (isAvailable: boolean) =>
-    api.put('/me/availability', { is_available: isAvailable })
+    api.put('/me/availability', { is_available: isAvailable }),
+  listMyOrganizations: () => api.get('/me/organizations'),
 }
 
 export const apiKeysService = {
@@ -134,11 +138,63 @@ export const contactsService = {
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
-  getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`),
-  import: (file: File) => {
+  getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`)
+}
+
+// Generic Import/Export Service
+export interface ExportColumn {
+  key: string
+  label: string
+}
+
+export interface ExportConfig {
+  table: string
+  columns: ExportColumn[]
+  default_columns: string[]
+}
+
+export interface ImportConfig {
+  table: string
+  required_columns: ExportColumn[]
+  optional_columns: ExportColumn[]
+  unique_column: string
+}
+
+export interface ImportResult {
+  created: number
+  updated: number
+  skipped: number
+  errors: number
+  messages: string[]
+}
+
+export const dataService = {
+  // Get export configuration for a table
+  getExportConfig: (table: string) => api.get<ExportConfig>(`/export/${table}/config`),
+
+  // Get import configuration for a table
+  getImportConfig: (table: string) => api.get<ImportConfig>(`/import/${table}/config`),
+
+  // Export data - returns CSV blob
+  exportData: async (table: string, columns?: string[], filters?: Record<string, string>) => {
+    const response = await api.post('/export', { table, columns, filters }, {
+      responseType: 'blob'
+    })
+    return response
+  },
+
+  // Import data from CSV file
+  importData: (table: string, file: File, updateOnDuplicate?: boolean, columnMapping?: Record<string, string>) => {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post('/contacts/import', formData, {
+    formData.append('table', table)
+    if (updateOnDuplicate) {
+      formData.append('update_on_duplicate', 'true')
+    }
+    if (columnMapping) {
+      formData.append('column_mapping', JSON.stringify(columnMapping))
+    }
+    return api.post<ImportResult>('/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   }
@@ -576,7 +632,7 @@ export const organizationService = {
 
 }
 
-// Organizations (super admin only)
+// Organizations
 export interface Organization {
   id: string
   name: string
@@ -586,7 +642,11 @@ export interface Organization {
 
 export const organizationsService = {
   list: () => api.get<{ organizations: Organization[] }>('/organizations'),
-  getCurrent: () => api.get<Organization>('/organizations/current')
+  getCurrent: () => api.get<Organization>('/organizations/current'),
+  create: (data: { name: string }) => api.post('/organizations', data),
+  // Members
+  addMember: (data: { user_id?: string; email?: string; role_id?: string }) =>
+    api.post('/organizations/members', data),
 }
 
 export interface Webhook {
@@ -792,6 +852,28 @@ export const tagsService = {
   update: (name: string, data: { name?: string; color?: string }) =>
     api.put<Tag>(`/tags/${encodeURIComponent(name)}`, data),
   delete: (name: string) => api.delete(`/tags/${encodeURIComponent(name)}`)
+}
+
+// Conversation Notes
+export interface ConversationNote {
+  id: string
+  contact_id: string
+  created_by_id: string
+  created_by_name: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export const notesService = {
+  list: (contactId: string, params?: { limit?: number; before?: string }) =>
+    api.get<{ notes: ConversationNote[]; total: number; has_more: boolean }>(`/contacts/${contactId}/notes`, { params }),
+  create: (contactId: string, data: { content: string }) =>
+    api.post<ConversationNote>(`/contacts/${contactId}/notes`, data),
+  update: (contactId: string, noteId: string, data: { content: string }) =>
+    api.put<ConversationNote>(`/contacts/${contactId}/notes/${noteId}`, data),
+  delete: (contactId: string, noteId: string) =>
+    api.delete(`/contacts/${contactId}/notes/${noteId}`)
 }
 
 export default api
