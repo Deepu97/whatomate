@@ -282,29 +282,8 @@ async function executeCustomAction(action: CustomAction) {
     const response = await customActionsService.execute(action.id, contactsStore.currentContact.id)
     let result: ActionResult = (response.data as any).data || response.data
 
-    // Handle JavaScript action - execute code in frontend
-    if (result.data?.code && result.data?.context) {
-      try {
-        // Create a function from the code and execute with context
-        const context = result.data.context
-        const code = result.data.code
-        // The code should return an object like: { toast: {...}, clipboard: '...', url: '...' }
-        const fn = new Function('context', 'contact', 'user', 'organization', code)
-        const jsResult = fn(context, context.contact, context.user, context.organization)
-
-        // Merge JS result into action result
-        if (jsResult) {
-          if (jsResult.toast) result.toast = jsResult.toast
-          if (jsResult.clipboard) result.clipboard = jsResult.clipboard
-          if (jsResult.url) result.redirect_url = jsResult.url
-          if (jsResult.message) result.message = jsResult.message
-        }
-      } catch (jsError: any) {
-        console.error('JavaScript action error:', jsError)
-        toast.error(t('chat.jsError') + ': ' + jsError.message)
-        return
-      }
-    }
+    // JavaScript actions are now executed server-side via goja.
+    // The response already contains structured result fields (toast, clipboard, redirect_url, message).
 
     // Handle different result types
     if (result.redirect_url) {
@@ -314,7 +293,14 @@ async function executeCustomAction(action: CustomAction) {
         const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
         redirectUrl = basePath + redirectUrl
       }
-      window.open(redirectUrl, '_blank')
+      try {
+        const parsed = new URL(redirectUrl, window.location.origin)
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          window.open(parsed.href, '_blank')
+        }
+      } catch {
+        // Invalid URL, ignore
+      }
     }
 
     if (result.clipboard) {
@@ -1003,17 +989,9 @@ async function loadMediaForMessage(message: Message) {
   mediaLoadingStates.value[message.id] = true
 
   try {
-    const token = authStore.token
-    if (!token) {
-      console.error('No auth token available')
-      return
-    }
-
     const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
     const response = await fetch(`${basePath}/api/media/${message.id}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      credentials: 'include'
     })
 
     if (!response.ok) {
@@ -1135,18 +1113,15 @@ async function sendMediaMessage() {
       formData.append('caption', mediaCaption.value.trim())
     }
 
-    const token = authStore.token
-    if (!token) {
-      toast.error(t('errors.unauthorized'))
-      return
-    }
+    // Read CSRF token for mutating request
+    const csrfMatch = document.cookie.match(/(?:^|; )whm_csrf=([^;]*)/)
+    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : ''
 
     const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
     const response = await fetch(`${basePath}/api/messages/media`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
+      credentials: 'include',
+      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
       body: formData
     })
 
@@ -1429,6 +1404,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  id="info-button"
                   class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
                   :class="isInfoPanelOpen && 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'"
                   @click="isInfoPanelOpen = !isInfoPanelOpen"
